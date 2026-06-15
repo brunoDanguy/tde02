@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <header>
+        <h1>Sistema Seguro - TDE 02</h1>
+        <p>Criptografia Hibrida RSA + AES | PUCPR</p>
+    </header>
+
+    <div class="container dashboard">
+        <h2>Login realizado com sucesso!</h2>
+        <p class="subtitulo">Voce esta autenticado.</p>
+
+        <div class="info-usuario" id="info-usuario">
+            Carregando...
+        </div>
+
+        <span class="badge">Sessao autenticada com criptografia hibrida</span>
+
+        <br><br>
+        <button onclick="sair()">Sair</button>
+    </div>
+
+    <script>
+        // pega os dados do usuario que foram salvos pelo login.js
+        var dadosSalvos = sessionStorage.getItem('usuario');
+
+        if (!dadosSalvos) {
+            // se nao tem usuario na sessao manda pro login
+            location.href = 'login.html';
+        } else {
+            var usuario = JSON.parse(dadosSalvos);
+
+            document.getElementById('info-usuario').innerHTML =
+                '<strong>Nome:</strong> ' + usuario.nome + '<br>' +
+                '<strong>Email:</strong> ' + usuario.email + '<br>' +
+                '<strong>ID:</strong> ' + usuario.id;
+        }
+
+        function sair() {
+            sessionStorage.removeItem('usuario');
+            location.href = 'login.html';
+        }
+    </script>
+
+</body>
+</html>
