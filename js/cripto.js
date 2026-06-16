@@ -1,9 +1,10 @@
-// esse arquivo faz a criptografia hibrida antes de enviar os dados pro servidor
-// hibrida = usa RSA e AES juntos
-// RSA sozinho e lento pra dados grandes, entao a gente usa AES pra cifrar os dados
-// e usa o RSA so pra cifrar a chave do AES
+// esse arquivo faz toda a criptografia antes de enviar qualquer dado pro servidor
+// uso criptografia hibrida: RSA + AES juntos
+// por que hibrida? RSA e lento pra dados grandes, AES e rapido mas precisa trocar a chave com seguranca
+// entao: uso AES pra cifrar os dados e RSA pra cifrar a chave do AES
 
-// converte um ArrayBuffer pra base64 pra poder mandar no JSON
+// converte ArrayBuffer pra base64 pra poder colocar no JSON
+// o JSON so aceita texto, nao bytes brutos
 function bufferParaBase64(buffer) {
     var bytes = new Uint8Array(buffer);
     var binario = '';
@@ -13,9 +14,10 @@ function bufferParaBase64(buffer) {
     return btoa(binario);
 }
 
-// a chave publica RSA vem do servidor no formato PEM (texto)
-// precisa converter pra binario pra usar na Web Crypto API
+// a chave publica RSA vem do servidor como texto PEM (aquele formato com -----BEGIN PUBLIC KEY-----)
+// preciso converter pra bytes pra usar na API de criptografia do navegador
 function pemParaBuffer(pem) {
+    // remove o cabecalho, rodape e quebras de linha, fica so o base64 puro
     var base64 = pem.replace(/-----[^-]+-----/g, '').replace(/\s/g, '');
     var binario = atob(base64);
     var bytes = new Uint8Array(binario.length);
@@ -25,20 +27,23 @@ function pemParaBuffer(pem) {
     return bytes.buffer;
 }
 
-// busca a chave publica RSA que ta salva no servidor
+// busca a chave publica RSA do servidor
+// essa funcao e chamada toda vez antes de criptografar
+// a chave publica pode ser compartilhada, nao tem problema
 async function obterChavePublica() {
     var resposta = await fetch('php/get_public_key.php');
     var dados = await resposta.json();
     return dados.chave_publica;
 }
 
-// funcao principal que criptografa os dados do formulario
+// funcao principal: recebe os dados do formulario e retorna tudo criptografado
 async function criptografarHibrido(dados) {
 
-    // pega a chave publica RSA do servidor
+    // 1. pega a chave publica RSA do servidor
     var pemPublico = await obterChavePublica();
 
-    // importa a chave publica pra usar com RSA-OAEP
+    // 2. importa a chave publica no formato que a Web Crypto API entende
+    // RSA-OAEP com SHA-1 pra ser compativel com o openssl do PHP
     var chaveRSA = await crypto.subtle.importKey(
         'spki',
         pemParaBuffer(pemPublico),
@@ -47,18 +52,19 @@ async function criptografarHibrido(dados) {
         ['encrypt']
     );
 
-    // gera uma chave AES de 256 bits aleatoria
+    // 3. gera uma chave AES de 256 bits totalmente aleatoria
+    // essa chave e diferente em cada envio de formulario
     var chaveAES = await crypto.subtle.generateKey(
         { name: 'AES-CBC', length: 256 },
-        true,
+        true,    // precisa ser true pra poder exportar depois
         ['encrypt']
     );
 
-    // gera o IV (vetor de inicializacao) aleatorio de 16 bytes
-    // o IV e necessario pro AES-CBC, garante que mesmo dado cifrado duas vezes fica diferente
+    // 4. gera o IV (vetor de inicializacao) aleatorio de 16 bytes
+    // o IV garante que se eu cifrar o mesmo texto duas vezes, o resultado e diferente
     var iv = crypto.getRandomValues(new Uint8Array(16));
 
-    // cifra os dados do formulario com AES-256-CBC
+    // 5. converte os dados do formulario pra JSON e depois pra bytes, ai cifra com AES
     var dadosCodificados = new TextEncoder().encode(JSON.stringify(dados));
     var dadosCifrados = await crypto.subtle.encrypt(
         { name: 'AES-CBC', iv: iv },
@@ -66,21 +72,22 @@ async function criptografarHibrido(dados) {
         dadosCodificados
     );
 
-    // exporta a chave AES como bytes brutos pra poder cifrar com RSA
+    // 6. exporta a chave AES como bytes brutos pra poder cifrar ela com RSA
     var chaveAESBruta = await crypto.subtle.exportKey('raw', chaveAES);
 
-    // cifra a chave AES com RSA usando a chave publica do servidor
-    // so o servidor consegue abrir porque so ele tem a chave privada
+    // 7. cifra a chave AES com RSA usando a chave publica do servidor
+    // so quem tem a chave privada (o servidor) consegue abrir
     var chaveCifrada = await crypto.subtle.encrypt(
         { name: 'RSA-OAEP' },
         chaveRSA,
         chaveAESBruta
     );
 
-    // retorna tudo em base64 pra enviar via JSON
+    // retorna os tres campos em base64 pra mandar via JSON
+    // mostrar isso no network do devtools na hora da apresentacao
     return {
-        dados_criptografados: bufferParaBase64(dadosCifrados),
-        chave_criptografada:  bufferParaBase64(chaveCifrada),
-        iv:                   bufferParaBase64(iv)
+        dados_criptografados: bufferParaBase64(dadosCifrados),   // formulario cifrado com AES
+        chave_criptografada:  bufferParaBase64(chaveCifrada),    // chave AES cifrada com RSA
+        iv:                   bufferParaBase64(iv)               // vetor de inicializacao do AES
     };
 }

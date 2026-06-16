@@ -1,6 +1,6 @@
-// pega o formulario e escuta o evento de submit
+// escuta o submit do formulario de cadastro
 document.getElementById('form-cadastro').addEventListener('submit', async function(e) {
-    e.preventDefault(); // impede o formulario de recarregar a pagina
+    e.preventDefault(); // impede o comportamento padrao de recarregar a pagina
 
     var btn   = document.getElementById('btn-submit');
     var nome  = document.getElementById('nome').value.trim();
@@ -8,6 +8,7 @@ document.getElementById('form-cadastro').addEventListener('submit', async functi
     var senha = document.getElementById('senha').value;
     var conf  = document.getElementById('confirmar-senha').value;
 
+    // validacoes basicas antes de criptografar
     if (senha !== conf) {
         mostrarAlerta('As senhas nao coincidem.', 'erro');
         return;
@@ -18,16 +19,19 @@ document.getElementById('form-cadastro').addEventListener('submit', async functi
         return;
     }
 
+    // desabilito o botao pra nao enviar duas vezes
     btn.disabled = true;
     btn.textContent = 'Criptografando...';
 
     try {
-        // chama a funcao do cripto.js que faz a criptografia hibrida
+        // aqui chamo o cripto.js que faz toda a criptografia hibrida
+        // depois daqui os dados nunca mais aparecem em texto puro
         var payload = await criptografarHibrido({ nome, email, senha });
 
         btn.textContent = 'Enviando...';
 
-        // envia os dados ja criptografados pro PHP
+        // mando os dados ja criptografados pro PHP via POST
+        // no network do devtools da pra ver que so vai dado cifrado
         var resposta = await fetch('php/cadastro.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -51,6 +55,7 @@ document.getElementById('form-cadastro').addEventListener('submit', async functi
     btn.textContent = 'Cadastrar';
 });
 
+// exibe a mensagem de erro ou sucesso na tela
 function mostrarAlerta(msg, tipo) {
     var el = document.getElementById('alerta');
     el.textContent = msg;
